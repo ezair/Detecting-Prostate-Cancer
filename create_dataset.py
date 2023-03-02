@@ -4,6 +4,8 @@ import pydicom as dicom
 import os
 import png
 import time
+import cv2
+
 
 from dotenv import load_dotenv
 
@@ -85,29 +87,31 @@ def create_image_datasets(cancer_df, path_to_manifest_folder):
 
         if cancer_df.iloc[i]["cancer"]:
             new_image_location = os.path.join(
-                current_location, cancer_image_path, f"image_{i}.png"
+                current_location, cancer_image_path
             )
         else:
             new_image_location = os.path.join(
-                current_location, nonmalignant_image_path, f"image_{i}.png"
+                current_location, nonmalignant_image_path
             )
 
         original_image_path = os.path.join(original_image_path, name_of_dcm_file)
-
         ds = dicom.dcmread(original_image_path)
-        shape = ds.pixel_array.shape
-        image_2d = ds.pixel_array.astype(float)
-        image_2d_scaled = (np.maximum(image_2d, 0) / image_2d.max()) * 255.0
-        image_2d_scaled = np.uint8(image_2d_scaled)
+        pixel_array = ds.pixel_array.astype(float)
 
-        # Write the PNG file.
-        if os.path.exists(original_image_path):
-            with open(new_image_location, "wb") as png_file:
-                print(f"Original dcm image: {original_image_path}")
-                print(f"New png image: {new_image_location}")
-                print("\n\n")
-                w = png.Writer(shape[1], shape[0], greyscale=True)
-                w.write(png_file, image_2d_scaled)
+        for slice_number in range(pixel_array.shape[0]):
+            # We only care about things in this range.
+            if slice_number not in [130, 134]:
+                continue
+
+            slice_image_path = os.path.join(
+                new_image_location,
+                f"image_{i}_{slice_number}.jpg"
+            )
+
+            if cv2.imwrite(slice_image_path, pixel_array[slice_number]):
+                print(f"{new_image_location} created successfully\n")
+            else:
+                print(f"Failed to create {new_image_location}...\n")
 
 
 def main():
@@ -122,9 +126,9 @@ def main():
     print("Generating information on cancer/noncancerous photos...")
     cancer_df = get_cancer_df(threshold_for_cancer=ucla_cancer_threshold)
 
-    print("Dataset distribution (msg shown for 10 seconds)...")
+    print("Dataset distribution (msg shown for 5 seconds)...")
     print(cancer_df["cancer"].value_counts())
-    time.sleep(10)
+    time.sleep(5)
 
     print("Creating dataset now (msg shown for 5 seconds)...")
     time.sleep(5)
